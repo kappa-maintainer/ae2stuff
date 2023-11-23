@@ -1,32 +1,18 @@
 buildscript {
-    configurations.all {
-        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-    }
     repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public' }
+        maven { url = 'https://maven.outlands.top/releases' }
         mavenCentral()
-        mavenLocal()
-        maven {
-            name = "forge"
-            url = "http://files.minecraftforge.net/maven"
-        }
-        maven {
-            name = "sonatype"
-            url = "https://oss.sonatype.org/content/repositories/snapshots/"
-        }
-        maven {
-            name = "gradle plugins"
-            url = "https://plugins.gradle.org/m2/"
-        }
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
-        classpath "gradle.plugin.com.matthewprenger:CurseGradle:1.0.9"
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '6.99.+', changing: true
+        //classpath "org.spongepowered:mixingradle:0.7-SNAPSHOT"
     }
 }
 
 apply plugin: 'scala'
-apply plugin: 'net.minecraftforge.gradle.forge'
-apply plugin: 'com.matthewprenger.cursegradle'
+apply plugin: 'net.minecraftforge.gradle'
 
 file "build.properties" withReader {
     def prop = new Properties()
@@ -50,12 +36,33 @@ group = "net.bdew"
 archivesBaseName = "ae2stuff"
 
 minecraft {
-    version = "${config.minecraft.version}-${config.forge.version}"
-    mappings = "${config.minecraft.mappings}"
-    useDepAts = true
-    makeObfSourceJar = false
-    replace("BDLIB_VER", config.bdlib.version)
-    replace("AE2STUFF_VER", simpleVersion.toString())
+    mappings channel: "stable", version: "39-1.12"
+
+    accessTransformer = file('src/main/resources/fmp_at.cfg')
+
+    runs {
+        client {
+            workingDirectory project.file('run/client')
+
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+        }
+
+        server {
+            workingDirectory project.file('run/server')
+
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+
 }
 
 repositories {
@@ -66,30 +73,69 @@ repositories {
     }
     maven {
         name "JEI"
-        url "http://dvs1.progwml6.com/files/maven"
+        url "https://dvs1.progwml6.com/files/maven"
     }
     maven {
-        name "HWYLA"
-        url "http://tehnut.info/maven"
+        url "https://cursemaven.com"
+        content {
+            includeGroup "curse.maven"
+        }
     }
-    ivy {
-        name "AE2"
-        artifactPattern "http://addons-origin.cursecdn.com/files/${config.ae2.cf}/[module]-[revision](-[classifier])(.[ext])"
+    maven {
+        name 'Cleanroom Maven'
+        url 'https://maven.cleanroommc.com/'
+    }
+    maven {
+        url "https://repo.cleanroommc.com/snapshots"
+    }
+    maven {
+        url "https://maven.outlands.top/releases/"
+    }
+    maven {
+        url "https://jitpack.io/"
     }
 }
 
+ext {
+    lwjglLibraries = [
+            [
+                    'lwjgl3-glfw', 'lwjgl3-jemalloc', 'lwjgl3-openal',
+                    'lwjgl3-opengl', 'lwjgl3-stb', 'lwjgl3-tinyfd', 'lwjgl3'
+            ],
+
+            [
+                    'natives-linux-arm64', 'natives-linux-arm32', 'natives-linux',
+                    'natives-macos-arm64', 'natives-macos',
+                    'natives-windows-arm64', 'natives-windows-x86', 'natives-windows'
+            ]
+    ]
+    lwjglArch = 'natives-linux'
+}
+
 dependencies {
-    compile "net.bdew:bdlib:${config.bdlib.version}-mc${config.minecraft.version}:dev"
+    compileOnly "net.bdew:bdlib:${config.bdlib.version}-mc${config.minecraft.version}:dev"
 
-    deobfCompile "mezz.jei:jei_${config.minecraft.version}:${config.jei.version}"
-    deobfCompile "mcp.mobius.waila:Hwyla:${config.hwyla.version}"
+    compileOnly fg.deobf("mezz.jei:jei_${config.minecraft.version}:${config.jei.version}")
+    //compileOnly fg.deobf("mcp.mobius.waila:Hwyla:${config.hwyla.version}")
 
-    deobfCompile ":appliedenergistics2:${config.ae2.version}@jar"
+    compileOnly fg.deobf("curse.maven:pae2-570458:4848912")
+    compileOnly fg.deobf("curse.maven:hwyla-253449:2568751")
+
+    minecraft ("com.cleanroommc:cleanroom:15.24.0.3007") {
+        exclude group: 'org.scala-lang'
+    }
+
+    implementation 'org.scala-lang:scala-library:2.12.18'
+    lwjglLibraries[0].each {
+        lwjglLibraries[1].each { arch ->
+            runtimeOnly "org.lwjgl3:$it:3.3.2-22-CLEANROOM:$lwjglArch"
+        }
+    }
 
 }
 
 import org.apache.tools.ant.filters.ReplaceTokens
-
+/*
 sourceSets {
     main {
         scala {
@@ -100,91 +146,16 @@ sourceSets {
         }
     }
 }
-
+*/
 processResources {
-    inputs.property "tokens", minecraft.replacements
-    from(sourceSets.main.resources.srcDirs) {
-        include 'mcmod.info'
-        filter(ReplaceTokens, tokens: minecraft.replacements)
-    }
 
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'mcmod.info'
-    }
 }
 
-task sourceJarReal(type: Jar) {
-    classifier "sources"
-}
-
-task deobfJar(type: Jar) {
-    from sourceSets.main.output
-    exclude "**/*.psd"
-    classifier "dev"
-    duplicatesStrategy "exclude"
-}
 
 
 jar {
     exclude "**/*.psd"
 }
 
-afterEvaluate { project ->
-    // Fudge the inputs of api/source jars so we get the version after replacements
-    tasks.getByPath(":sourceJarReal").from(tasks.getByPath(":sourceMainScala").outputs.files)
-}
-
-artifacts {
-    archives sourceJarReal
-    archives deobfJar
-}
-
-apply plugin: 'maven-publish'
-
-publishing {
-    publications {
-        maven(MavenPublication) {
-            artifact deobfJar
-            artifact sourceJarReal
-        }
-    }
-    repositories {
-        maven {
-            url "file://var/www/maven"
-        }
-    }
-}
-
-curseforge {
-    apiKey = project.hasProperty("curseForgeApiKey") ? project.curseForgeApiKey : ""
-    project {
-        id = config.curseforge.id
-
-        releaseType = "alpha"
-        changelog = project.hasProperty("changelog") ? project.changelog : "No changelog available"
-
-        addGameVersion config.minecraft.version
-        addGameVersion "1.12"
-        addGameVersion "1.12.2"
 
 
-        mainArtifact(jar) {
-            displayName = "AE2Stuff ${simpleVersion} (MC ${config.minecraft.version})"
-        }
-
-        addArtifact(deobfJar) {
-            displayName = "AE2Stuff ${simpleVersion} Deobfuscated (MC ${config.minecraft.version})"
-        }
-
-        addArtifact(sourceJarReal) {
-            displayName = "AE2Stuff ${simpleVersion} Source (MC ${config.minecraft.version})"
-        }
-
-        relations {
-            requiredLibrary 'bdlib'
-            requiredLibrary 'applied-energistics-2'
-            optionalLibrary 'waila'
-            optionalLibrary 'just-enough-items-jei'
-        }
-    }
-}

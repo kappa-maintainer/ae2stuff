@@ -113,7 +113,7 @@ ext {
 }
 
 dependencies {
-    compileOnly "net.bdew:bdlib:${config.bdlib.version}-mc${config.minecraft.version}:dev"
+    implementation "net.bdew:bdlib:${config.bdlib.version}-mc${config.minecraft.version}:dev"
 
     compileOnly fg.deobf("mezz.jei:jei_${config.minecraft.version}:${config.jei.version}")
     //compileOnly fg.deobf("mcp.mobius.waila:Hwyla:${config.hwyla.version}")
@@ -121,11 +121,7 @@ dependencies {
     compileOnly fg.deobf("curse.maven:pae2-570458:4848912")
     compileOnly fg.deobf("curse.maven:hwyla-253449:2568751")
 
-    minecraft ("com.cleanroommc:cleanroom:15.24.0.3007") {
-        exclude group: 'org.scala-lang'
-    }
-
-    implementation 'org.scala-lang:scala-library:2.12.18'
+    minecraft ("com.cleanroommc:cleanroom:15.24.0.3011")
     lwjglLibraries[0].each {
         lwjglLibraries[1].each { arch ->
             runtimeOnly "org.lwjgl3:$it:3.3.2-22-CLEANROOM:$lwjglArch"
@@ -135,20 +131,31 @@ dependencies {
 }
 
 import org.apache.tools.ant.filters.ReplaceTokens
-/*
+
 sourceSets {
     main {
         scala {
-            srcDir 'src'
+            srcDir 'src/main/scala'
         }
         resources {
             srcDir 'resources'
         }
     }
 }
-*/
+
 processResources {
 
+}
+
+task sourceJarReal(type: Jar) {
+    archiveClassifier = "sources"
+}
+
+task deobfJar(type: Jar) {
+    from sourceSets.main.output
+    exclude "**/*.psd"
+    archiveClassifier = "dev"
+    duplicatesStrategy "exclude"
 }
 
 
@@ -156,6 +163,17 @@ processResources {
 jar {
     exclude "**/*.psd"
 }
+/*
+afterEvaluate { project ->
+    // Fudge the inputs of api/source jars so we get the version after replacements
+    tasks.getByPath(":sourceJarReal").from(tasks.getByPath(":sourceMainScala").outputs.files)
+}
+*/
+artifacts {
+    archives sourceJarReal
+    archives deobfJar
+}
+
 
 
 
